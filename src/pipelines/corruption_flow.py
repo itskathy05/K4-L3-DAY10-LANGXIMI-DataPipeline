@@ -198,6 +198,11 @@ def main() -> None:
         repaired_quality,
         corrupted_freshness,
         repaired_freshness,
+        baseline_quality=baseline_quality,
+        baseline_freshness=baseline_freshness,
+        corruption_log=corruption_log,
+        corrupted_answers=read_json(settings.paths.corrupted_answers),
+        repair_verification=verification,
     )
     print(f"  report -> {settings.paths.comparison_report}")
 
@@ -216,8 +221,7 @@ def main() -> None:
         )
     )
 
-    scenarios = corruption_log.get("scenarios", corruption_log) if isinstance(corruption_log, dict) else corruption_log
-    print(f"\nCorruption scenarios logged: {len(scenarios) if hasattr(scenarios, '__len__') else 'n/a'}")
+    print(f"\nCorruption scenarios logged: {len(corruption_log.get('scenarios', []))}")
     print(f"Repair is idempotent: {verification['is_idempotent']}")
     print("\nArtifacts written:")
     for path in (
@@ -231,6 +235,12 @@ def main() -> None:
     ):
         marker = "ok" if Path(path).exists() else "MISSING"
         print(f"  [{marker}] {path}")
+
+    if not verification["is_idempotent"]:
+        raise SystemExit(
+            "Repair verification failed: the repaired corpus does not match the baseline "
+            f"(see {settings.paths.corruption_log.with_name('repair_verification.json')})."
+        )
 
 
 if __name__ == "__main__":

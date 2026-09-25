@@ -4,6 +4,7 @@
   "mean_token_f1": 0.5,
   "judge_accuracy": 0.5,
   "mean_judge_score": 3,
+  "judge_fallbacks": 10,
   "ragas": {
     "skipped": "Set RUN_RAGAS=1 to enable the slower Ragas pass."
   }

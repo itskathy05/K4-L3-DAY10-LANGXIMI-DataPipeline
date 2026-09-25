@@ -18,6 +18,9 @@ from retrieval.llm import build_llm
 from retrieval.qa import answer_question
 
 
+FALLBACK_JUDGE_REASONING = "Fallback heuristic judge used because the LLM evaluator was unavailable."
+
+
 class JudgeVerdict(BaseModel):
     score: int = Field(ge=1, le=5)
     correct: bool
@@ -66,7 +69,7 @@ Return:
         return JudgeVerdict(
             score=score,
             correct=score >= 3,
-            reasoning="Fallback heuristic judge used because the LLM evaluator was unavailable.",
+            reasoning=FALLBACK_JUDGE_REASONING,
         )
 
 
@@ -136,6 +139,7 @@ def evaluate_pipeline(
         "mean_token_f1": mean(item["token_f1"] for item in answers),
         "judge_accuracy": mean(1.0 if item["judge"]["correct"] else 0.0 for item in answers),
         "mean_judge_score": mean(item["judge"]["score"] for item in answers),
+        "judge_fallbacks": sum(1 for item in answers if item["judge"]["reasoning"] == FALLBACK_JUDGE_REASONING),
     }
     summary["ragas"] = _run_ragas(settings, answers)
 

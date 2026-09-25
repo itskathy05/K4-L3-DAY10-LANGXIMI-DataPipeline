@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -62,14 +62,23 @@ def freshness_report_path(settings: Settings, label: str) -> Path:
 
 def resolve_source_records(settings: Settings) -> tuple[list[PaperRecord], str]:
     raw_path = settings.paths.raw_records_json
-    if settings.refresh_source or not raw_path.exists():
-        try:
-            return fetch_source_records(settings), "live-api"
-        except Exception as exc:
-            if not raw_path.exists():
-                raise
-            print(f"  ! live fetch failed ({exc}); falling back to the raw snapshot")
-    return load_raw_records(raw_path), "raw-snapshot"
+    snapshot = load_raw_records(raw_path) if raw_path.exists() else None
+    if not settings.refresh_source and snapshot is not None:
+        return snapshot, "raw-snapshot"
+
+    try:
+        records = fetch_source_records(settings)
+    except Exception as exc:
+        if snapshot is None:
+            raise
+        print(f"  ! live fetch failed ({exc}); falling back to the raw snapshot")
+        return snapshot, "raw-snapshot"
+
+    if records == snapshot:
+        return records, "raw-snapshot"
+    write_json(raw_path, [asdict(record) for record in records])
+    print(f"  live records saved to {raw_path} so the repair step rebuilds the same corpus")
+    return records, "live-api"
 
 
 def persist_clean_dataset(df: pd.DataFrame, csv_path: Path, json_path: Path) -> None:
@@ -96,9 +105,20 @@ def run_quality_gate(df: pd.DataFrame, settings: Settings, label: str) -> tuple[
 
 def ensure_test_set(df: pd.DataFrame, settings: Settings) -> Path:
     path = settings.paths.eval_testset
-    if settings.refresh_test_set or not path.exists():
+    reason = None
+    if settings.refresh_test_set:
+        reason = "REFRESH_TEST_SET is set"
+    elif not path.exists():
+        reason = "no saved test set"
+    else:
+        expected = {doc_id for item in read_json(path) for doc_id in item.get("ground_truth_doc_ids", [])}
+        missing = expected - set(df["paper_id"])
+        if missing:
+            reason = f"{len(missing)} ground-truth papers are not in the current corpus"
+
+    if reason:
         build_test_set(df, path)
-        print(f"  benchmark test set built: {len(read_json(path))} questions -> {path}")
+        print(f"  benchmark test set built ({reason}): {len(read_json(path))} questions -> {path}")
     else:
         print(f"  benchmark test set reused: {len(read_json(path))} questions <- {path}")
     return path
@@ -111,6 +131,13 @@ def print_metrics(label: str, metrics: dict[str, Any]) -> None:
         f"judge_accuracy={metrics.get('judge_accuracy', 0.0):.3f} "
         f"judge_score={metrics.get('mean_judge_score', 0.0):.2f}"
     )
+
+
+def project_relative(settings: Settings, path: Path) -> str:
+    try:
+        return path.relative_to(settings.paths.project_dir).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def build_source_summary(
@@ -136,9 +163,9 @@ def build_source_summary(
         "freshness_threshold_days": settings.freshness_threshold_days,
         "llm_provider": normalized_provider(settings),
         "llm_model": settings.model_name,
-        "raw_api_response": str(settings.paths.raw_api_response),
-        "raw_records_json": str(settings.paths.raw_records_json),
-        "clean_csv": str(settings.paths.clean_csv),
+        "raw_api_response": project_relative(settings, settings.paths.raw_api_response),
+        "raw_records_json": project_relative(settings, settings.paths.raw_records_json),
+        "clean_csv": project_relative(settings, settings.paths.clean_csv),
     }
 
 
@@ -179,6 +206,11 @@ def run_baseline(settings: Settings | None = None) -> StageArtifacts:
 
     print("[3/6] Quality gate - Great Expectations 1.x + freshness SLA")
     quality, freshness = run_quality_gate(clean_df, settings, "baseline")
+    if not quality.get("success"):
+        raise RuntimeError(
+            "Baseline quality gate failed; refusing to index unvalidated data into "
+            f"'{settings.baseline_collection_name}'. See {settings.paths.quality_dir}."
+        )
 
     print("[4/6] Indexing - MiniLM embeddings into ChromaDB")
     index = LocalEmbeddingIndex.build(clean_df, settings, settings.paths.embeddings_json)

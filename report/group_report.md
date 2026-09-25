@@ -20,10 +20,10 @@
 
 ## 2. Tóm tắt kết quả
 
-Nhóm đã hoàn thành trọn vẹn toàn bộ 7 mốc Checkpoint (CP0 – CP6) của bài lab theo đúng tiến trình chuẩn:
+Nhóm đã hoàn thành các mốc CP0 – CP5 của bài lab (CP6 là buổi demo trực tiếp). Toàn bộ số liệu dưới đây lấy từ lần chạy lại ngày 2026-09-25 lúc 16:53 (GMT+7), không cấu hình API key:
 
 1. **Baseline Pipeline (Pha 1):** Xây dựng thành công pipeline thu thập dữ liệu Crossref Academic (24 bản ghi snapshot), chuẩn hóa làm sạch loại bỏ mã JATS XML, tạo trường `text_for_embedding`, lưu trữ an toàn `data/clean/papers_clean.csv`. Hệ thống thiết lập chốt kiểm dịch Great Expectations 1.x (vượt qua 6/6 Expectations) và đạt chuẩn Freshness SLA (chỉ 4.2% quá hạn $\le$ 25%). Đánh chỉ mục vào ChromaDB (`papers-baseline`) và đánh giá trên bộ 10 câu hỏi benchmark chuẩn đạt kết quả tuyệt đối: **Retrieval Hit Rate = 100%**, **Mean Token F1 = 100%**.
-2. **Thử thách Tiêm Lỗi Dữ Liệu (Pha 2 - Data Corruption):** Triển khai trọn vẹn 6 kịch bản tiêm lỗi thực tế trong `src/ingestion/corruption.py`. Kết quả đã chứng minh rõ hiện tượng nguy hiểm **Silent Failure**: AI không hề báo lỗi đỏ nhưng hiệu năng sụt giảm nghiêm trọng (**Hit Rate giảm xuống 60%**, **Token F1 giảm xuống 50%**). Chốt kiểm dịch Great Expectations 1.x và Freshness SLA lập tức phát hiện và gióng chuông cảnh báo (`quality_gate: FAILED`, `freshness: WARNING`).
+2. **Thử thách Tiêm Lỗi Dữ Liệu (Pha 2 - Data Corruption):** Triển khai trọn vẹn 6 kịch bản tiêm lỗi thực tế trong `src/ingestion/corruption.py`. Kết quả đã chứng minh rõ hiện tượng nguy hiểm **Silent Failure**: pipeline không báo lỗi nào nhưng hiệu năng sụt giảm rõ (**Hit Rate giảm xuống 60%**, **Token F1 giảm xuống 50%**); 5/10 câu hỏi chuyển thành câu trả lời "I don't know". Chốt kiểm dịch Great Expectations 1.x và Freshness SLA lập tức phát hiện và gióng chuông cảnh báo (`quality_gate: FAILED`, `freshness: WARNING`).
 3. **Phục Hồi Dữ Liệu An Toàn (Idempotent Repair):** Kích hoạt cơ chế tự phục hồi từ bản lưu trữ thô nguyên thủy (`data/raw/crossref_records.json`). Hệ thống chứng minh tính bất biến tuyệt đối (`is_idempotent: True`), khôi phục 100% phong độ ban đầu và xuất bản báo cáo đối chiếu định lượng 3 trạng thái đầy đủ tại `data/reports/corruption_report.md`.
 
 ## 3. Kiến trúc và luồng dữ liệu
@@ -50,7 +50,7 @@ Crossref API (hoặc Snapshot Offline data/raw/crossref_records.json)
 | Embedding/index   | Cleaned DataFrame | Tạo vector MiniLM 384-dim, nạp 3 collection ChromaDB tách biệt | `data/chroma/`, `papers-baseline`, `corrupted`, `repaired` | Thành viên 3 |
 | Evaluation        | Cleaned DataFrame, Chroma Index | Sinh 10 câu hỏi chuẩn (4 loại), tính Hit Rate, Token F1, LLM Judge | `data/eval/test_set.json`, `baseline_metrics.json` | Thành viên 4 |
 | Observability     | DataFrame theo từng stage | Ephemeral GX 1.x suite (6 expectations), Freshness SLA monitor | `data/quality/*_quality_report.json`, `freshness_report.json` | Thành viên 4 |
-| Corruption/repair | Clean DataFrame, Raw snapshot | Tiêm 6 dạng lỗi dữ liệu; khôi phục idempotent từ Raw records | `corruption_log.json`, `papers_clean_corrupted.csv`, `repaired.csv` | Thành viên 2 & 4 |
+| Corruption/repair | Clean DataFrame, Raw snapshot | Tiêm 6 dạng lỗi dữ liệu; khôi phục idempotent từ Raw records và kiểm chứng bằng `repair_verification.json` | `corruption_log.json`, `papers_clean_corrupted.csv`, `papers_clean_repaired.csv` | Thành viên 4 (corruption), 1 (repair), 2 (cleaning dùng cho repair) |
 | Orchestration     | Toàn bộ các module | Điều phối luồng Phase 1 và Phase 2 end-to-end, so sánh 3 trạng thái | `script/run_phase1.py`, `script/run_corruption_flow.py`, reports | Thành viên 1 |
 
 ## 4. Cách tái hiện kết quả
@@ -59,8 +59,8 @@ Crossref API (hoặc Snapshot Offline data/raw/crossref_records.json)
 
 | Biến/cấu hình             | Giá trị sử dụng |
 | ---------------------------- | ------------------- |
-| `LLM_PROVIDER`             | `gemini` (hoặc mock fallback) |
-| `LLM_MODEL`                | `gemini-2.5-flash`  |
+| `LLM_PROVIDER`             | `gemini` (mặc định); lần chạy nộp bài không có API key nên judge dùng heuristic theo token F1 ở cả 3 trạng thái (`judge_fallbacks = 10/10`) |
+| `LLM_MODEL`                | `gemini-2.5-flash` (mặc định, không được gọi vì không có key) |
 | Embedding model              | `sentence-transformers/all-MiniLM-L6-v2` |
 | Số lượng Crossref records | 24 bài báo khoa học |
 | Retrieval `top_k`           | 4                   |
@@ -89,8 +89,8 @@ python script/run_corruption_flow.py
 
 | Lệnh             | Trạng thái                                    | Thời điểm chạy gần nhất | Bằng chứng                         |
 | ----------------- | ----------------------------------------------- | ----------------------------- | ------------------------------------ |
-| Baseline pipeline | Thành công (Exit code 0) | 2026-09-25 15:35 | `data/results/baseline_metrics.json`, `data/reports/phase1_report.md` |
-| Corruption flow   | Thành công (Exit code 0) | 2026-09-25 16:05 | `data/results/corrupted_metrics.json`, `repaired_metrics.json`, `corruption_report.md` |
+| Baseline pipeline | Thành công (Exit code 0) | 2026-09-25 16:53 (GMT+7) | `data/results/baseline_metrics.json`, `data/reports/phase1_report.md` |
+| Corruption flow   | Thành công (Exit code 0) | 2026-09-25 16:53 (GMT+7) | `data/results/corrupted_metrics.json`, `repaired_metrics.json`, `corruption_report.md` |
 
 ## 5. Ingestion, cleaning và data contract
 
@@ -98,9 +98,9 @@ python script/run_corruption_flow.py
 
 | Thuộc tính                | Giá trị                             |
 | --------------------------- | ------------------------------------- |
-| Source                      | Crossref REST API (`https://api.crossref.org/works`) & Local snapshot fallback |
-| Query/filter                | `query=retrieval augmented generation`, `filter=has-abstract:true` |
-| Thời điểm lấy dữ liệu | 2026-09-25                            |
+| Source                      | Snapshot `data/raw/crossref_records.json` (chế độ mặc định, dùng cho lần chạy nộp bài); Crossref REST API `https://api.crossref.org/works` khi đặt `REFRESH_SOURCE=1` |
+| Query/filter                | `query=agentic retrieval augmented generation large language model`, `filter=from-pub-date:<ngày chạy − 180 ngày>,has-abstract:true`, `rows=24` (chỉ dùng ở chế độ live) |
+| Thời điểm lấy dữ liệu | Snapshot đi kèm starter repo; lần chạy nộp bài (2026-09-25) đọc từ snapshot |
 | Số record nhận được    | 24 bản ghi                            |
 | Cơ chế retry/backoff      | Urllib3 Retry (3 lần, backoff factor 0.5, bắt lỗi 429/500/502/503/504) và tự động fallback sang local snapshot |
 
@@ -147,7 +147,7 @@ Summary: <summary>
 | Embedding model                          | `sentence-transformers/all-MiniLM-L6-v2` (384 chiều) |
 | Vector store/collection                  | ChromaDB: `papers-baseline`, `papers-corrupted`, `papers-repaired` |
 | Retrieval `top_k`                       | 4                             |
-| LLM provider/model                       | `gemini` (`gemini-2.5-flash`) kèm heuristic fallback an toàn |
+| LLM provider/model                       | `gemini` / `gemini-2.5-flash` (mặc định); không có API key nên judge dùng heuristic theo token F1 cho 10/10 câu ở cả 3 trạng thái |
 | Test set dùng chung cho ba trạng thái | `data/eval/test_set.json` (Cố định, bất biến) |
 
 **Lý do giữ nguyên test set qua 3 trạng thái:**
@@ -173,9 +173,9 @@ Summary: <summary>
 | ---------------------- | --------------: | --------------------------------------- |
 | `retrieval_hit_rate` |     **1.000 (100%)** | 10/10 câu hỏi truy xuất chính xác tài liệu chứa đáp án trong Top 4 |
 | `mean_token_f1`      |     **1.000 (100%)** | Câu trả lời của Agent trùng khớp hoàn hảo với Ground Truth |
-| `judge_accuracy`     |     **1.000 (100%)** | Đánh giá tính chính xác đạt mức tuyệt đối |
-| `mean_judge_score`   |     **5.000 / 5.0**  | Điểm chất lượng trung bình tối đa |
-| Ragas, nếu có        | Skipped | Tối ưu thời gian chạy bằng Heuristic & LLM Judge chuẩn hóa |
+| `judge_accuracy`     |     **1.000 (100%)** | Judge heuristic (theo token F1): 10/10 câu đúng |
+| `mean_judge_score`   |     **5.000 / 5.0**  | Heuristic: câu đúng hoàn toàn được 5 điểm |
+| Ragas, nếu có        | Skipped | Chỉ chạy khi đặt `RUN_RAGAS=1` |
 
 ## 8. Data quality và freshness
 
@@ -204,12 +204,12 @@ Summary: <summary>
 
 | Corruption | Cách tạo | Record bị tác động | Quality signal kỳ vọng | Tác động thực tế | Cách repair |
 | ------------------ | ---------- | ---------------------: | ------------------------ | --------------------- | -------------- |
-| 1. Drop latest records | Bỏ rơi 20% bài báo mới nhất | 4 bài | Data size sụt giảm | Hit rate giảm mạnh do thiếu tài liệu | Nạp lại đầy đủ từ snapshot thô |
-| 2. Blank summary | Xóa rỗng trường `summary` | 2 bài | Vi phạm GX min length | Token F1 sụt giảm nghiêm trọng | Đọc lại tóm tắt nguyên bản từ raw |
-| 3. Inject noise | Chèn chuỗi ký tự rác vào tóm tắt | 2 bài | Nhiễu ngữ nghĩa vector | Giảm độ tương đồng cosine | Làm sạch lại từ bản ghi gốc |
-| 4. Truncate title | Cắt ngắn tiêu đề xuống < 8 ký tự | 2 bài | Mất thông tin định danh | Agent khó trích xuất context | Khôi phục tiêu đề đầy đủ |
-| 5. Stale date | Lùi ngày xuất bản 365 ngày trước | 20 bài | Vi phạm Freshness SLA | Hệ thống báo động STALE WARNING | Tính toán lại ngày từ timestamp raw |
-| 6. Duplicate rows | Nhân bản bản ghi tạo trùng ID | 2 bài | Vi phạm GX unique ID | Gây ghost vectors trong ChromaDB | Khử trùng lặp qua logic `seen_ids` |
+| 1. Drop latest records | Bỏ rơi 20% bài báo mới nhất | 4 bài | Data size sụt giảm | 3 câu (eval_004, 007, 008) mất tài liệu → retrieval trượt, trả lời "I don't know"; quality gate không bắt được vì 22 dòng vẫn trong ngưỡng 5–5000 | Nạp lại đầy đủ từ snapshot thô |
+| 2. Blank summary | Xóa rỗng trường `summary` | 2 bài | Vi phạm GX min length | eval_002 vẫn truy xuất đúng bài nhưng summary rỗng → "I don't know" (F1 = 0); GX fail độ dài `summary` | Đọc lại tóm tắt nguyên bản từ raw |
+| 3. Inject noise | Chèn chuỗi ký tự rác vào tóm tắt | 2 bài | Nhiễu ngữ nghĩa vector | Không chạm tới bài nào trong test set nên metric không đổi; không expectation nào bắt được nhiễu | Làm sạch lại từ bản ghi gốc |
+| 4. Truncate title | Cắt ngắn tiêu đề xuống < 8 ký tự | 2 bài | Mất thông tin định danh | eval_010 không còn tra được bài theo tên đầy đủ → retrieval trượt, "I don't know" | Khôi phục tiêu đề đầy đủ |
+| 5. Stale date | Lùi ngày xuất bản 365 ngày trước | 20 bài | Vi phạm Freshness SLA | Freshness: 22/22 bản ghi quá hạn → STALE; không câu hỏi `date` nào còn tài liệu nên metric không đo được tác động | Tính toán lại ngày từ timestamp raw |
+| 6. Duplicate rows | Nhân bản bản ghi tạo trùng ID | 2 bài | Vi phạm GX unique ID | GX fail `paper_id` unique; collection corrupted có vector trùng nhưng metric không đổi | Khử trùng lặp qua logic `seen_ids` |
 
 **Corruption log:**
 - Đường dẫn: `data/results/corruption_log.json`
@@ -217,31 +217,29 @@ Summary: <summary>
 - Nhận xét: Log ghi nhận chi tiết 6 kịch bản, danh sách `affected_ids` cụ thể, số dòng baseline (24) và số dòng corrupted (22).
 
 **Nguyên tắc phục hồi an toàn (Idempotent Repair):**
-Quy trình repair tuyệt đối không sửa thủ công (patch tay) trên dữ liệu bẩn. Thay vào đó, pipeline đọc lại toàn bộ dữ liệu từ bản lưu trữ nguồn nguyên thủy không thể thay đổi (`data/raw/crossref_records.json`), chạy lại hàm làm sạch chuẩn và ghi đè đồng bộ lên serving layer. Cơ chế này đảm bảo tính Idempotent: chạy 1 lần hay 100 lần kết quả vẫn luôn đồng nhất và sạch bóng.
+Quy trình repair tuyệt đối không sửa thủ công (patch tay) trên dữ liệu bẩn. Thay vào đó, pipeline đọc lại toàn bộ dữ liệu từ bản lưu trữ nguồn nguyên thủy không thể thay đổi (`data/raw/crossref_records.json`), chạy lại hàm làm sạch chuẩn và ghi đè đồng bộ lên serving layer. Kết quả được kiểm chứng bằng `data/results/repair_verification.json`: 24/24 `paper_id` và `text_for_embedding` khớp baseline, 0 trùng lặp, `is_idempotent: true`; nếu không khớp, `run_corruption_flow.py` exit khác 0.
 
 ## 10. So sánh baseline, corrupted và repaired
 
 | Metric/signal            | Baseline | Corrupted | Repaired | Thay đổi do corruption | Mức phục hồi | Nhận xét   |
 | ------------------------ | -------: | --------: | -------: | -----------------------: | --------------: | ------------ |
-| `retrieval_hit_rate`   | **1.000** | **0.600** | **1.000** | **-40.0%** | **100% phục hồi** | Bị ảnh hưởng nặng do mất tài liệu mới |
-| `mean_token_f1`        | **1.000** | **0.500** | **1.000** | **-50.0%** | **100% phục hồi** | Sụt giảm do summary rỗng và nhiễu văn bản |
-| `judge_accuracy`       | **1.000** | **0.500** | **1.000** | **-50.0%** | **100% phục hồi** | Điểm chính xác giảm tương ứng |
-| `mean_judge_score`     | **5.000** | **3.000** | **5.000** | **-2.000** | **100% phục hồi** | Đánh giá chất lượng tụt từ Xuất sắc xuống Trung bình |
+| `retrieval_hit_rate`   | **1.000** | **0.600** | **1.000** | **-40 điểm %** | **100% phục hồi** | 4 câu trượt: 3 do `drop_latest_records`, 1 do `truncate_title` |
+| `mean_token_f1`        | **1.000** | **0.500** | **1.000** | **-50 điểm %** | **100% phục hồi** | 5 câu F1 = 0: 4 câu trượt ở trên và eval_002 (summary rỗng); nhiễu không ảnh hưởng |
+| `judge_accuracy`       | **1.000** | **0.500** | **1.000** | **-50 điểm %** | **100% phục hồi** | Judge heuristic theo token F1 nên giảm đúng như F1 |
+| `mean_judge_score`     | **5.000** | **3.000** | **5.000** | **-2.000** | **100% phục hồi** | Heuristic: câu đúng 5 điểm, câu sai 1 điểm |
 | Quality checks pass/fail | **True**  | **False** | **True**  | Báo động FAILED | Trở lại PASSED | GX 1.x bắt lỗi vi phạm length & unique |
 | Freshness status         | **True**  | **False** | **True**  | STALE WARNING | Trở lại FRESH | Tỉ lệ mốc meo vọt lên 100% rồi về lại 4.2% |
 
 ### Hai kết luận nhân quả cốt lõi:
-1. **Dữ liệu lỗi $\rightarrow$ Silent Failure $\rightarrow$ Quality Gate gióng chuông:** Khi tiêm lỗi dữ liệu, Agent vẫn trả lời bình thường mà không hề crash, nhưng độ chính xác Hit Rate sụt tới 40% và F1 sụt 50%. Nhờ có chốt kiểm dịch Great Expectations 1.x và Freshness SLA, sự cố được phát hiện ngay lập tức ở tầng dữ liệu trước khi lọt vào sản phẩm phục vụ người dùng.
+1. **Dữ liệu lỗi $\rightarrow$ Silent Failure $\rightarrow$ Quality Gate gióng chuông:** Khi tiêm lỗi, pipeline vẫn ingest, index và trả lời mà không có exception nào; 5/10 câu thành "I don't know", hit rate giảm 40 điểm % và token F1 giảm 50 điểm %. Sự cố được phát hiện ở tầng dữ liệu: GX fail 2/6 expectation (`paper_id` unique, độ dài `summary`) và freshness báo 100% quá hạn; dữ liệu lỗi chỉ được index vào collection cách ly `papers-corrupted` để đo thiệt hại.
 2. **Idempotent Repair $\rightarrow$ Khôi phục toàn vẹn 100%:** Khi kích hoạt cơ chế tự phục hồi từ raw snapshot, dữ liệu sạch được tái lập hoàn toàn, đưa toàn bộ chỉ số Retrieval Hit Rate, Token F1, và Quality Gate trở lại 100% phong độ ban đầu (`is_idempotent: True`).
 
 ## 11. Vấn đề tích hợp quan trọng
 
-- **Triệu chứng:** Khi chạy script kiểm thử riêng lẻ trong thư mục `tests/` hoặc khi gọi module `corruption.py`, chương trình gặp lỗi `ModuleNotFoundError: No module named 'core'` và `NotImplementedError` tại hàm tiêm lỗi.
-- **Nguyên nhân:** Khi chạy file từ thư mục con, Python chỉ tìm kiếm package trong thư mục con đó mà chưa nhận diện thư mục `src/`. Đồng thời, module `corruption.py` mới chỉ có code khung.
-- **Cách xử lý:** 
-  1. Thêm cấu hình đường dẫn `sys.path.insert(0, ...)` trỏ chính xác về thư mục `src/` trong các script kiểm thử.
-  2. Cài đặt trọn vẹn 6 kịch bản tiêm độc tố dữ liệu và tái tạo embedding trong `src/ingestion/corruption.py`.
-- **Cách xác minh:** Chạy thành công lệnh `python script/run_phase1.py` và `python script/run_corruption_flow.py` với exit code 0, toàn bộ artifact được kiểm chứng `[ok]`.
+- **Triệu chứng:** `data/reports/phase1_report.md` ghi "Tổng số bản ghi thu thập: 0" và "Số bản ghi sau làm sạch: 0" dù pipeline xử lý 24 bản ghi; đồng thời `corruption_report.md` in các dòng quality gate/freshness và phần nhận định dưới dạng chữ gõ cứng thay vì lấy từ kết quả.
+- **Nguyên nhân:** hai module ghép với nhau không cùng contract: `phase1.py` (thành viên 1) ghi `source_summary` với key `raw_records`/`clean_rows`, còn `reporting.py` (thành viên 4) đọc `raw_count`/`clean_count` và mặc định về 0 khi không thấy key; hàm báo cáo đối chiếu nhận quality/freshness làm tham số nhưng không dùng tới.
+- **Cách xử lý:** thống nhất key theo `phase1.py`; viết lại `reporting.py` để mọi số liệu và nhận định sinh từ artifact (quality, freshness, `corruption_log.json`, `corrupted_answers.json`, `repair_verification.json`), thêm `judge_fallbacks` vào metrics để báo cáo ghi rõ judge dùng LLM hay heuristic.
+- **Cách xác minh:** chạy lại `python script/run_phase1.py` và `python script/run_corruption_flow.py` (exit 0); `phase1_report.md` ghi đúng 24 bản ghi raw và 24 bản ghi sạch, còn bảng quality/freshness trong `corruption_report.md` khớp với các file trong `data/quality/`.
 
 ## 12. Giới hạn và hướng cải thiện
 
@@ -250,6 +248,9 @@ Quy trình repair tuyệt đối không sửa thủ công (patch tay) trên dữ
 | Corpus hiện tại có quy mô 24 bài báo | Chưa bao quát toàn bộ độ trễ khi scale dữ liệu lớn | Mở rộng scale ingestion lên 500-1000 bài báo để kiểm thử tải của ChromaDB |
 | Freshness SLA kiểm tra theo mốc ngày cố định | Cần cập nhật ngày hiện tại để đo độ tươi liên tục | Tích hợp cron job định kỳ chạy automated freshness monitoring hàng ngày |
 | LLM Judge phụ thuộc hạn ngạch API ngoài | Có thể gặp lỗi `429 Too Many Requests` khi vượt quota | Tích hợp local LLM (Ollama) làm judge offline để độc lập hoàn toàn với cloud API |
+| Lần chạy nộp bài không có API key nên judge là heuristic theo token F1 | `judge_accuracy` không độc lập với `mean_token_f1` | Chạy lại có API key; đạt khi `judge_fallbacks = 0` ở cả 3 file metrics |
+| Test set lấy 10 bài đầu theo `paper_id`; cả 2 câu `date` rơi vào bài bị `drop_latest_records` xoá | Không đo được silent failure của `stale_date` (trả lời sai ngày một cách tự tin) | Thêm câu `date` cho bài còn lại sau corruption; kỳ vọng F1 của câu `date` giảm trong khi hit rate giữ nguyên |
+| Quality gate không bắt được `drop_latest_records`, `truncate_title`, `inject_noise` | Ba lỗi này chỉ lộ ra qua metric | Thêm expectation độ dài `title` ≥ 8 và so số dòng với lần chạy trước; kỳ vọng bản corrupted fail thêm expectation |
 
 ## 13. Checklist trước khi nộp
 
@@ -260,5 +261,5 @@ Quy trình repair tuyệt đối không sửa thủ công (patch tay) trên dữ
 - [x] Bảng metrics khớp 100% với các file trong `data/results/`.
 - [x] Quality/freshness conclusions khớp 100% với `data/quality/`.
 - [x] Các đường dẫn báo cáo và artifact sinh ra đầy đủ, hợp lệ.
-- [x] Mỗi thành viên đã hoàn thành báo cáo vai trò riêng.
+- [ ] Mỗi thành viên đã hoàn thành báo cáo vai trò riêng (còn thiếu báo cáo của thành viên 2 và 3).
 - [x] Không có `.env`, API key, token hoặc secret trong source code hay báo cáo.
