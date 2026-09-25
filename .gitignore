@@ -6,3 +6,7 @@ src/*.egg-info/
 lab/
 **/__pycache__/
 doc_verification_report.md
+tests/check_clean_role2.py
+tests/check_corruption_gate.py
+tests/check_obs.py
+tests/check_testset.py

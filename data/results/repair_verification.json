@@ -1,0 +1,11 @@
+{
+  "baseline_rows": 24,
+  "repaired_rows": 24,
+  "row_count_restored": true,
+  "paper_ids_restored": true,
+  "missing_after_repair": [],
+  "unexpected_after_repair": [],
+  "identical_text_for_embedding": 24,
+  "duplicate_paper_ids": 0,
+  "is_idempotent": true
+}

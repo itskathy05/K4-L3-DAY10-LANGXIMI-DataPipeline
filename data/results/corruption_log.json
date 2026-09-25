@@ -1,0 +1,58 @@
+{
+  "scenarios": [
+    {
+      "name": "drop_latest_records",
+      "description": "Dropped ~20% of latest records to simulate stale ingestion & missing documents.",
+      "affected_count": 4,
+      "affected_ids": [
+        "10.1145/3637528.3671812",
+        "10.1145/3637528.3671808",
+        "10.1145/3637528.3671804",
+        "10.1145/3637528.3671807"
+      ]
+    },
+    {
+      "name": "blank_summary",
+      "description": "Erased summaries on records to trigger schema length validation failure.",
+      "affected_count": 2,
+      "affected_ids": [
+        "10.1145/3637528.3671802",
+        "10.1145/3637528.3671824"
+      ]
+    },
+    {
+      "name": "inject_noise",
+      "description": "Injected random corruption tokens to degrade retrieval precision and Token F1.",
+      "affected_count": 2,
+      "affected_ids": [
+        "10.1145/3637528.3671823",
+        "10.1145/3637528.3671822"
+      ]
+    },
+    {
+      "name": "truncate_title",
+      "description": "Truncated paper titles to fewer than 8 characters.",
+      "affected_count": 2,
+      "affected_ids": [
+        "10.1145/3637528.3671821",
+        "10.1145/3637528.3671810"
+      ]
+    },
+    {
+      "name": "stale_date",
+      "description": "Shifted publication dates back by 365 days (age_days > 180) to violate Freshness SLA.",
+      "affected_count": 20
+    },
+    {
+      "name": "duplicate_rows",
+      "description": "Appended duplicate rows to cause ghost vectors and unique ID constraint violations.",
+      "affected_count": 2,
+      "affected_ids": [
+        "10.1145/3637528.3671802",
+        "10.1145/3637528.3671824"
+      ]
+    }
+  ],
+  "baseline_rows": 24,
+  "corrupted_rows": 22
+}
