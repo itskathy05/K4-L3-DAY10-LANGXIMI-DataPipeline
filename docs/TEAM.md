@@ -10,7 +10,7 @@
 
 | STT | Họ và tên | MSSV | Email | Vai trò & Phân công công việc | Báo cáo cá nhân |
 |---:|---|---|---|---|---|
-| 1 | | | | Trưởng nhóm / Pipeline Integrator (`core/`, `phase1.py`, `corruption_flow.py`) | `report/<MSSV1>_HoTen.md` |
+| 1 | Đàm Quang Trung | 2A202602525 | trungdam1305@gmail.com | Pipeline Lead & Integrator (`core/`, `phase1.py`, `corruption_flow.py`) — CP0: môi trường & `.env`; CP3: baseline `phase1.py`; CP4–CP5: `corruption_flow.py` (corruption → repair → so sánh 3 trạng thái); CP6: điều phối demo & kiểm tra contributor | `report/2A202602525_DamQuangTrung.md` |
 | 2 | | | | Data Foundation & Recovery (`crossref.py`, `cleaning.py`, raw data) | `report/<MSSV2>_HoTen.md` |
 | 3 | | | | RAG & Vector Index (`retrieval/index.py`, `embeddings.py`, ChromaDB) | `report/<MSSV3>_HoTen.md` |
 | 4 | | | | Observability & Evaluation (`quality.py` GX 1.x, `testset.py`, reporting) | `report/<MSSV4>_HoTen.md` |
@@ -21,14 +21,20 @@
 
 ## # Cá nhân
 
-### ## HoVaTen1-MSSV1
-- **Vai trò:** Trưởng nhóm & Điều phối Pipeline.
+### ## DamQuangTrung-2A202602525
+- **Vai trò:** Pipeline Lead & Integrator — điều phối luồng dữ liệu end-to-end (`core/`, `src/pipelines/`).
 - **Công việc chi tiết đã hoàn thành:**
-  - Thiết lập cấu hình hệ thống `core/config.py` và đường dẫn artifacts `core/utils.py`.
-  - Kết nối luồng thực thi trong `src/pipelines/phase1.py` và `src/pipelines/corruption_flow.py`.
-  - Kiểm tra tính nhất quán của các artifacts và theo dõi Contributor tracking trên GitHub nhánh `main`.
+  - CP0: dựng môi trường `.venv` + `pip install -e .`, cấu hình `.env` từ `.env.example` (không commit secret).
+  - `core/`: mọi đường dẫn artifact lấy tập trung từ `core/config.py` (không hardcode path); bổ sung `dataframe_records()` trong `core/utils.py` để xuất JSON an toàn kiểu dữ liệu (numpy/NaN/timestamp).
+  - CP3 — `src/pipelines/phase1.py`: ingestion (snapshot, hoặc live khi `REFRESH_SOURCE=1`) → cleaning + kiểm tra schema (`validate_clean_schema`) → quality gate GX 1.x + freshness → index ChromaDB `papers-baseline` → test set cố định + evaluate → `phase1_report.md`; demo agent tùy chọn, tự bỏ qua khi thiếu API key.
+  - CP4–CP5 — `src/pipelines/corruption_flow.py`: tiêm lỗi → đo suy giảm trên collection riêng `papers-corrupted` → repair idempotent từ `data/raw/crossref_records.json` → `papers-repaired` → kiểm chứng repair (`data/results/repair_verification.json`) → báo cáo và bảng so sánh 3 trạng thái trên console; cả 3 trạng thái dùng chung `data/eval/test_set.json`.
+  - Kiểm thử tích hợp với code thật của thành viên 2 (`crossref.py`, `cleaning.py`) và thành viên 3 (`retrieval/`), dùng bản tạm (stub) cho các module còn TODO: cả hai lệnh exit 0, đủ artifact, repair khớp 24/24 bản ghi; 5/5 test của thành viên 2 vẫn pass.
+- **Trạng thái / việc còn lại:**
+  - Chưa chạy end-to-end thật: còn chờ `quality.py`, `testset.py`, `reporting.py` và `corruption.py`.
+  - Chế độ live (`REFRESH_SOURCE=1`) còn lỗi lineage: repair dựng lại từ snapshot cũ và test set cũ bị dùng lại cho corpus mới — cần phối hợp với thành viên 2 để lưu raw khi fetch live.
 - **Điều học được / Đóng góp chính:**
-  - Hiểu sâu sắc về thiết kế Idempotent Pipeline và quản lý trạng thái luồng dữ liệu đa tầng.
+  - Repair chỉ thật sự idempotent khi bảo toàn lineage: phải dựng lại từ đúng bản raw đã sinh ra baseline, và cả 3 trạng thái phải đo trên cùng một test set thì phép so sánh mới có ý nghĩa.
+  - Tách 3 collection ChromaDB giúp đo tác động của dữ liệu lỗi mà không làm bẩn collection phục vụ chính.
 
 ### ## HoVaTen2-MSSV2
 - **Vai trò:** Phụ trách Ingestion, Làm sạch & Phục hồi dữ liệu.
