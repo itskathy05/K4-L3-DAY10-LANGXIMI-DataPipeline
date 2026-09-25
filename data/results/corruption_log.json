@@ -1,0 +1,66 @@
+[
+  {
+    "corruption_type": "drop_latest_records",
+    "description": "Removed the most recently published records to simulate a failed ingestion run.",
+    "affected_paper_ids": [
+      "10.1145/3637528.3671812",
+      "10.1145/3637528.3671808",
+      "10.1145/3637528.3671804",
+      "10.1145/3637528.3671807",
+      "10.1145/3637528.3671802"
+    ],
+    "count": 5
+  },
+  {
+    "corruption_type": "blank_summary",
+    "description": "Cleared the summary text to simulate an empty scrape.",
+    "affected_paper_ids": [
+      "10.1145/3637528.3671824",
+      "10.1145/3637528.3671823",
+      "10.1145/3637528.3671822"
+    ],
+    "count": 3
+  },
+  {
+    "corruption_type": "inject_noise",
+    "description": "Appended garbage characters into the summary to simulate scraping noise.",
+    "affected_paper_ids": [
+      "10.1145/3637528.3671821",
+      "10.1145/3637528.3671810",
+      "10.1145/3637528.3671820"
+    ],
+    "count": 3
+  },
+  {
+    "corruption_type": "truncate_title",
+    "description": "Truncated the title to fewer than 8 characters.",
+    "affected_paper_ids": [
+      "10.1145/3637528.3671819",
+      "10.1145/3637528.3671818",
+      "10.1145/3637528.3671817"
+    ],
+    "count": 3
+  },
+  {
+    "corruption_type": "stale_date",
+    "description": "Pushed the published date back 365 days to simulate stale metadata.",
+    "affected_paper_ids": [
+      "10.1145/3637528.3671816",
+      "10.1145/3637528.3671815",
+      "10.1145/3637528.3671814",
+      "10.1145/3637528.3671813",
+      "10.1145/3637528.3671801",
+      "10.1145/3637528.3671811"
+    ],
+    "count": 6
+  },
+  {
+    "corruption_type": "duplicate_rows",
+    "description": "Duplicated rows to simulate a duplicate ingestion write.",
+    "affected_paper_ids": [
+      "10.1145/3637528.3671806",
+      "10.1145/3637528.3671809"
+    ],
+    "count": 2
+  }
+]

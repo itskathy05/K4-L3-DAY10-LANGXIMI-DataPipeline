@@ -1,0 +1,43 @@
+{
+  "report_name": "repaired",
+  "success": true,
+  "row_count": 24,
+  "expectations": [
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "column": null,
+      "success": true,
+      "unexpected_count": 0
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "column": "paper_id",
+      "success": true,
+      "unexpected_count": 0
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_unique",
+      "column": "paper_id",
+      "success": true,
+      "unexpected_count": 0
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "column": "title",
+      "success": true,
+      "unexpected_count": 0
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "column": "text_for_embedding",
+      "success": true,
+      "unexpected_count": 0
+    },
+    {
+      "expectation_type": "expect_column_value_lengths_to_be_between",
+      "column": "summary",
+      "success": true,
+      "unexpected_count": 0
+    }
+  ]
+}
