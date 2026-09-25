@@ -20,6 +20,11 @@ def read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def dataframe_records(df) -> list[dict[str, Any]]:
+    """Convert a dataframe to JSON-safe records (numpy/NaN/timestamp friendly)."""
+    return json.loads(df.to_json(orient="records", date_format="iso"))
+
+
 def write_csv(df, path: Path) -> None:
     ensure_parent(path)
     df.to_csv(path, index=False)
