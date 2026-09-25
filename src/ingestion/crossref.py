@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import date
 from html import unescape
 from pathlib import Path
@@ -11,7 +11,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from core.config import Settings
-from core.utils import normalize_whitespace, read_json, write_json
+from core.utils import normalize_whitespace, read_json
 
 
 @dataclass(frozen=True)
@@ -111,7 +111,6 @@ def _load_snapshot(settings: Settings) -> list[PaperRecord]:
         try:
             records = parse_crossref_payload(read_json(response_path))
             if records:
-                write_json(settings.paths.raw_records_json, [asdict(record) for record in records])
                 return records
         except (ValueError, TypeError):
             pass
@@ -121,11 +120,7 @@ def _load_snapshot(settings: Settings) -> list[PaperRecord]:
 
 
 def fetch_source_records(settings: Settings) -> list[PaperRecord]:
-    """Use the local snapshot by default; refresh from Crossref when requested."""
-    if not settings.refresh_source and (settings.paths.raw_api_response.exists()
-                                        or settings.paths.raw_records_json.exists()):
-        return _load_snapshot(settings)
-
+    """Use live Crossref records, falling back to the untouched local snapshot."""
     retry = Retry(total=3, backoff_factor=0.5, status_forcelist=(429, 500, 502, 503, 504),
                   allowed_methods=("GET",), respect_retry_after_header=True)
     session = requests.Session()
@@ -141,15 +136,15 @@ def fetch_source_records(settings: Settings) -> list[PaperRecord]:
         records = parse_crossref_payload(response.json())
         if not records:
             raise ValueError("Crossref returned no usable records.")
-        settings.paths.raw_api_response.parent.mkdir(parents=True, exist_ok=True)
-        settings.paths.raw_api_response.write_bytes(response.content)
-        write_json(settings.paths.raw_records_json, [asdict(record) for record in records])
+        print(f"Source: LIVE Crossref\nRecords: {len(records)}")
         return records
     except (requests.RequestException, ValueError, TypeError):
         try:
-            return _load_snapshot(settings)
+            records = _load_snapshot(settings)
         except (FileNotFoundError, ValueError, TypeError) as snapshot_exc:
             raise RuntimeError("Crossref request failed and no usable local snapshot is available.") from snapshot_exc
+        print(f"Source: FALLBACK snapshot\nRecords: {len(records)}")
+        return records
     finally:
         session.close()
 

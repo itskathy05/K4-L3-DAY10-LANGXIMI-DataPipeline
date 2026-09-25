@@ -62,37 +62,53 @@ def test_cleaning_deduplicates_and_repair_is_repeatable() -> None:
         repaired.loc[0, "published"]).date()).days
 
 
-def test_default_mode_uses_snapshot_without_network(tmp_path, monkeypatch) -> None:
+def test_live_api_success_uses_live_records_without_changing_snapshot(tmp_path, monkeypatch, capsys) -> None:
     snapshot = (ROOT / "data/raw/crossref_response.json").read_bytes()
+    saved_records = (ROOT / "data/raw/crossref_records.json").read_bytes()
     response_path = tmp_path / "crossref_response.json"
+    records_path = tmp_path / "crossref_records.json"
     response_path.write_bytes(snapshot)
+    records_path.write_bytes(saved_records)
     settings = load_settings(ROOT)
     settings = replace(settings, refresh_source=False, paths=replace(
         settings.paths,
         raw_api_response=response_path,
-        raw_records_json=tmp_path / "crossref_records.json",
+        raw_records_json=records_path,
     ))
 
-    def fail_if_called(*args, **kwargs):
-        raise AssertionError("Offline mode must not call Crossref")
+    live_item = json.loads(snapshot)["message"]["items"][0].copy()
+    live_item["DOI"] = "10.9999/live-source"
+    live_item["title"] = ["Live Crossref Record"]
+    live_payload = {"message": {"items": [live_item]}}
 
-    monkeypatch.setattr(requests.Session, "get", fail_if_called)
+    class FakeResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return live_payload
+
+    monkeypatch.setattr(requests.Session, "get", lambda *args, **kwargs: FakeResponse())
     records = fetch_source_records(settings)
 
-    assert len(records) == 24
+    assert [record.paper_id for record in records] == ["10.9999/live-source"]
+    assert capsys.readouterr().out == "Source: LIVE Crossref\nRecords: 1\n"
     assert response_path.read_bytes() == snapshot
-    assert load_raw_records(settings.paths.raw_records_json) == records
+    assert records_path.read_bytes() == saved_records
 
 
-def test_live_api_failure_falls_back_without_changing_response(tmp_path, monkeypatch) -> None:
+def test_live_api_failure_falls_back_without_changing_snapshot(tmp_path, monkeypatch, capsys) -> None:
     snapshot = (ROOT / "data/raw/crossref_response.json").read_bytes()
+    saved_records = (ROOT / "data/raw/crossref_records.json").read_bytes()
     response_path = tmp_path / "crossref_response.json"
+    records_path = tmp_path / "crossref_records.json"
     response_path.write_bytes(snapshot)
+    records_path.write_bytes(saved_records)
     settings = load_settings(ROOT)
-    settings = replace(settings, refresh_source=True, paths=replace(
+    settings = replace(settings, refresh_source=False, paths=replace(
         settings.paths,
         raw_api_response=response_path,
-        raw_records_json=tmp_path / "crossref_records.json",
+        raw_records_json=records_path,
     ))
 
     def fail_request(*args, **kwargs):
@@ -102,5 +118,6 @@ def test_live_api_failure_falls_back_without_changing_response(tmp_path, monkeyp
     records = fetch_source_records(settings)
 
     assert len(records) == 24
+    assert capsys.readouterr().out == "Source: FALLBACK snapshot\nRecords: 24\n"
     assert response_path.read_bytes() == snapshot
-    assert load_raw_records(settings.paths.raw_records_json) == records
+    assert records_path.read_bytes() == saved_records
