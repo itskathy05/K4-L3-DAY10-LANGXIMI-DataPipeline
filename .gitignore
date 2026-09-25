@@ -10,3 +10,5 @@ tests/check_clean_role2.py
 tests/check_corruption_gate.py
 tests/check_obs.py
 tests/check_testset.py
+tests/frontend/index.html
+tests/frontend/server.py
